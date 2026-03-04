@@ -18,8 +18,9 @@ class OpenVaspTransfer extends Model
     protected function casts(): array
     {
         return [
-            'payload' => 'array',
-            'decision_reason' => 'array',
+            'inquiry_payload' => 'array',
+            'resolution_payload' => 'array',
+            'confirmation_payload' => 'array',
         ];
     }
 }

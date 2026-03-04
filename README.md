@@ -1,135 +1,103 @@
-# Laravel OpenVASP Package
+# Laravel OpenVASP (TRP)
 
-A production-focused Laravel package that provides OpenVASP-compatible API primitives for Travel Rule messaging between VASPs.
+Laravel package implementing a **minimum acceptable Travel Rule Protocol (TRP) API** aligned with the OpenVASP core specification.
 
-> **Source of truth:** this package follows the OpenVASP association guidance and protocol concepts from [openvasp.org](https://www.openvasp.org), then maps them into Laravel-first HTTP + persistence workflows suitable for backend integration.
+- Spec source: https://gitlab.com/OpenVASP/travel-rule-protocol/-/blob/master/core/specification.md
+- Interop server: https://api.trp.openvasp.org
+- Interop guidance: https://gitlab.com/OpenVASP/interoperability
 
-## Features
+## What is implemented (minimum core)
 
-- API endpoints mounted under `/api/openvasp/*` by default.
-- Transfer lifecycle endpoints:
-  - create transfer message
-  - retrieve transfer by message ID
-  - accept / reject / settle / cancel state transitions
-- Pluggable persistence via `TransferRepository` contract.
-- Pluggable authentication middleware (Sanctum, Passport, custom guards, etc).
-- Database-backed implementation with migration included.
-- Testbench-based automated test suite.
-- MIT licensed (no paid/commercial-use dependency required).
+Routes are mounted under `/api/openvasp` by default:
+
+- `GET /api/openvasp/version`
+- `GET /api/openvasp/identity`
+- `POST /api/openvasp/inquiries/{inquiryId}`
+- `POST /api/openvasp/inquiry-resolutions/{inquiryId}`
+- `POST /api/openvasp/transfer-confirmations/{inquiryId}`
+
+These map to the TRP core flow:
+1. Transfer Inquiry
+2. Transfer Inquiry Resolution
+3. Transfer Confirmation
+
+## Header behavior
+
+For protocol endpoints, this package enforces:
+
+- `api-version`
+- `request-identifier` (UUID)
+
+Responses echo both headers.
+
+Optional `api-extensions` is checked against configured supported extensions. Unsupported extensions return `501 Not Implemented`.
 
 ## Installation
 
 ```bash
 composer require laravel-openvasp/laravel-openvasp
-```
-
-Publish config:
-
-```bash
 php artisan vendor:publish --tag=openvasp-config
-```
-
-Run migrations:
-
-```bash
 php artisan migrate
 ```
-
-## Routes
-
-By default, all routes are under `api/openvasp`:
-
-- `GET /api/openvasp/health`
-- `POST /api/openvasp/transfers`
-- `GET /api/openvasp/transfers/{messageId}`
-- `POST /api/openvasp/transfers/{messageId}/accept`
-- `POST /api/openvasp/transfers/{messageId}/reject`
-- `POST /api/openvasp/transfers/{messageId}/settle`
-- `POST /api/openvasp/transfers/{messageId}/cancel`
 
 ## Configuration
 
 `config/openvasp.php`
 
-```php
-return [
-    'route_prefix' => env('OPENVASP_ROUTE_PREFIX', 'api/openvasp'),
-    'middleware' => ['api'], // e.g. ['api', 'auth:sanctum']
-    'repository' => \LaravelOpenVasp\Services\DatabaseTransferRepository::class,
-    'database' => [
-        'enabled' => true,
-    ],
-    'protocol' => [
-        'version' => env('OPENVASP_PROTOCOL_VERSION', '1.0'),
-        'network' => env('OPENVASP_NETWORK', 'openvasp-mainnet'),
-    ],
-];
-```
+- `route_prefix`: default `api/openvasp`
+- `middleware`: pluggable auth stack (e.g. `auth:sanctum`, `auth:api`)
+- `repository`: pluggable persistence implementation
+- `protocol.version`: default `3.2.1`
+- `protocol.supported_extensions`: default `[]`
+- `identity.name`, `identity.lei`, `identity.x509`
 
-### Authentication integration (pluggable)
+Example LEI in config/tests: `24IN00POZKARSTIN8350`.
 
-Use whichever Laravel API auth stack you already run:
-
-- Sanctum: `['api', 'auth:sanctum']`
-- Passport/API guard: `['api', 'auth:api']`
-- Custom middleware pipeline: `['api', 'my-custom-openvasp-auth']`
-
-## Example transfer payload
+## Example inquiry payload
 
 ```json
 {
-  "message_id": "msg-1000",
-  "originator_lei": "24IN00POZKARSTIN8350",
-  "beneficiary_lei": "529900T8BM49AURSDO55",
+  "amount": 150025,
+  "callback": "https://originator.example/inquiry-resolution?q=4585839457",
   "asset": {
-    "symbol": "USDC",
-    "amount": "1500.25"
+    "dti": "4H95J0R2X"
   },
-  "travel_rule": {
-    "originator": {
-      "name": "Alice Originator",
-      "account_number": "ORIG-001"
-    },
-    "beneficiary": {
-      "name": "Bob Beneficiary",
-      "account_number": "BEN-001"
-    },
-    "originating_wallet": "0x1111111111111111111111111111111111111111",
-    "beneficiary_wallet": "0x2222222222222222222222222222222222222222"
+  "IVMS101": {
+    "originator": {"originatorPersons": []},
+    "beneficiary": {"beneficiaryPersons": []},
+    "originatingVASP": {
+      "originatingVASP": {
+        "legalPerson": {
+          "nationalIdentification": {
+            "nationalIdentifier": "24IN00POZKARSTIN8350"
+          }
+        }
+      }
+    }
   }
 }
 ```
 
-## Extending persistence
+## Interoperability and reference libraries
 
-Implement `LaravelOpenVasp\Contracts\TransferRepository` and set your class in config:
+This package aligns payload shape and LEI validation to help compatibility with tools/libraries referenced by OpenVASP interoperability docs:
 
-```php
-'repository' => App\OpenVasp\CustomTransferRepository::class,
-```
+- Rust IVMS: https://gitlab.com/21analytics/ivms101
+- Rust LEI: https://gitlab.com/21analytics/lei
+- Go LEI: https://github.com/trisacrypto/lei
 
-This allows integration with existing event stores, CQRS patterns, multi-tenant stores, or external protocol hubs.
-
-## Continuous Integration
-
-A GitHub Actions workflow is included at `.github/workflows/laravel-tests.yml` and runs the package test suite on pushes and pull requests against `main` and `feature/jetbox` using PHP 8.2 and 8.3.
-
-## Testing
-
-Run package tests:
+## Tests
 
 ```bash
 composer test
+./vendor/bin/pint --test
 ```
 
-## Production readiness checklist
+Optional external interop test:
 
-- Add your auth middleware (`auth:sanctum`, `auth:api`, mTLS/API gateway checks).
-- Restrict route access to trusted VASP peers.
-- Add request signing / cryptographic verification middleware according to your OpenVASP interoperability policy.
-- Enable detailed audit logging around state transitions.
-- Configure retries/idempotency (message ID uniqueness is enforced in DB).
-- Monitor the `/health` endpoint.
+```bash
+OPENVASP_RUN_INTEGRATION_TESTS=true composer test
+```
 
 ## License
 

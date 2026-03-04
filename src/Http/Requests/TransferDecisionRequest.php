@@ -16,8 +16,10 @@ class TransferDecisionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'reason.code' => ['nullable', 'string', 'max:40'],
-            'reason.message' => ['nullable', 'string', 'max:500'],
+            'approved' => ['nullable', 'array', 'required_without:rejected'],
+            'approved.address' => ['required_with:approved', 'string', 'max:255'],
+            'approved.callback' => ['required_with:approved', 'url', 'starts_with:https://'],
+            'rejected' => ['nullable', 'string', 'max:1000', 'required_without:approved'],
         ];
     }
 }

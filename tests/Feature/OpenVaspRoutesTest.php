@@ -4,107 +4,98 @@ declare(strict_types=1);
 
 namespace LaravelOpenVasp\Tests\Feature;
 
+use Illuminate\Support\Str;
 use LaravelOpenVasp\Enums\TransferStatus;
 use LaravelOpenVasp\Tests\TestCase;
 
 class OpenVaspRoutesTest extends TestCase
 {
-    public function test_health_endpoint_is_available(): void
+    public function test_version_endpoint_is_available(): void
     {
-        $response = $this->getJson('/api/openvasp/health');
+        $this->getJson('/api/openvasp/version')
+            ->assertOk()
+            ->assertJsonPath('version', '3.2.1');
+    }
+
+    public function test_identity_requires_protocol_headers(): void
+    {
+        $this->getJson('/api/openvasp/identity')->assertStatus(400);
+    }
+
+    public function test_identity_returns_trp_identity_with_header_echo(): void
+    {
+        $response = $this->withProtocolHeaders()->getJson('/api/openvasp/identity');
 
         $response->assertOk()
-            ->assertJsonPath('status', 'ok')
-            ->assertJsonPath('protocol.name', 'openvasp');
+            ->assertHeader('api-version', '3.2.1')
+            ->assertJsonPath('lei', '24IN00POZKARSTIN8350');
     }
 
-    public function test_it_creates_a_transfer_with_valid_payload(): void
+    public function test_it_runs_minimum_trp_happy_path(): void
     {
-        $response = $this->postJson('/api/openvasp/transfers', $this->validPayload());
+        $this->withProtocolHeaders()->postJson('/api/openvasp/inquiries/inq-1000', $this->validInquiryPayload())
+            ->assertOk()
+            ->assertJsonPath('status', TransferStatus::InquiryReceived->value);
 
-        $response->assertCreated()
-            ->assertJsonPath('data.message_id', 'msg-1000')
-            ->assertJsonPath('data.originator_lei', '24IN00POZKARSTIN8350')
-            ->assertJsonPath('data.status', TransferStatus::Pending->value);
+        $this->withProtocolHeaders()->postJson('/api/openvasp/inquiry-resolutions/inq-1000', [
+            'approved' => [
+                'address' => 'bc1qapprovedaddress',
+                'callback' => 'https://beneficiary.example/transfer-confirmation?token=1',
+            ],
+        ])->assertNoContent();
+
+        $this->withProtocolHeaders()->postJson('/api/openvasp/transfer-confirmations/inq-1000', [
+            'txid' => '0x123456',
+        ])->assertNoContent();
     }
 
-    public function test_it_requires_openvasp_fields_for_transfer_creation(): void
+    public function test_it_rejects_unsupported_extensions(): void
     {
-        $response = $this->postJson('/api/openvasp/transfers', []);
-
-        $response->assertUnprocessable()
-            ->assertJsonValidationErrors([
-                'message_id',
-                'originator_lei',
-                'beneficiary_lei',
-                'asset.symbol',
-                'asset.amount',
-                'travel_rule.originator',
-                'travel_rule.beneficiary',
-                'travel_rule.originating_wallet',
-                'travel_rule.beneficiary_wallet',
-            ]);
+        $this->withHeaders([
+            'api-version' => '3.2.1',
+            'request-identifier' => (string) Str::uuid(),
+            'api-extensions' => 'request-signing',
+        ])->postJson('/api/openvasp/inquiries/inq-1001', $this->validInquiryPayload())
+            ->assertStatus(501);
     }
 
-    public function test_it_advances_transfer_lifecycle_through_protocol_endpoints(): void
-    {
-        $this->postJson('/api/openvasp/transfers', $this->validPayload())->assertCreated();
-
-        $this->postJson('/api/openvasp/transfers/msg-1000/accept', [
-            'reason' => ['code' => 'KYC_OK', 'message' => 'Beneficiary checks passed'],
-        ])
-            ->assertOk()
-            ->assertJsonPath('data.status', TransferStatus::Accepted->value);
-
-        $this->postJson('/api/openvasp/transfers/msg-1000/settle')
-            ->assertOk()
-            ->assertJsonPath('data.status', TransferStatus::Settled->value);
-
-        $this->getJson('/api/openvasp/transfers/msg-1000')
-            ->assertOk()
-            ->assertJsonPath('data.status', TransferStatus::Settled->value);
-    }
-
-    public function test_it_can_reject_and_cancel_transfer_with_reason(): void
-    {
-        $this->postJson('/api/openvasp/transfers', $this->validPayload())->assertCreated();
-
-        $this->postJson('/api/openvasp/transfers/msg-1000/reject', [
-            'reason' => ['code' => 'TRAVEL_RULE_INCOMPLETE', 'message' => 'Missing beneficiary data'],
-        ])
-            ->assertOk()
-            ->assertJsonPath('data.status', TransferStatus::Rejected->value)
-            ->assertJsonPath('data.reason.code', 'TRAVEL_RULE_INCOMPLETE');
-
-        $this->postJson('/api/openvasp/transfers/msg-1000/cancel', [
-            'reason' => ['code' => 'ORIGINATOR_CANCELLED', 'message' => 'Originator aborted transfer'],
-        ])
-            ->assertOk()
-            ->assertJsonPath('data.status', TransferStatus::Cancelled->value);
-    }
-
-    private function validPayload(): array
+    private function validInquiryPayload(): array
     {
         return [
-            'message_id' => 'msg-1000',
-            'originator_lei' => '24IN00POZKARSTIN8350',
-            'beneficiary_lei' => '529900T8BM49AURSDO55',
+            'amount' => 150025,
+            'callback' => 'https://originator.example/inquiry-resolution?q=4585839457',
             'asset' => [
-                'symbol' => 'USDC',
-                'amount' => '1500.25',
+                'dti' => '4H95J0R2X',
             ],
-            'travel_rule' => [
+            'IVMS101' => [
                 'originator' => [
-                    'name' => 'Alice Originator',
-                    'account_number' => 'ORIG-001',
+                    'originatorPersons' => [
+                        ['naturalPerson' => ['name' => ['nameIdentifier' => [['primaryIdentifier' => 'Alice']]]]],
+                    ],
                 ],
                 'beneficiary' => [
-                    'name' => 'Bob Beneficiary',
-                    'account_number' => 'BEN-001',
+                    'beneficiaryPersons' => [
+                        ['naturalPerson' => ['name' => ['nameIdentifier' => [['primaryIdentifier' => 'Bob']]]]],
+                    ],
                 ],
-                'originating_wallet' => '0x1111111111111111111111111111111111111111',
-                'beneficiary_wallet' => '0x2222222222222222222222222222222222222222',
+                'originatingVASP' => [
+                    'originatingVASP' => [
+                        'legalPerson' => [
+                            'nationalIdentification' => [
+                                'nationalIdentifier' => '24IN00POZKARSTIN8350',
+                            ],
+                        ],
+                    ],
+                ],
             ],
         ];
+    }
+
+    private function withProtocolHeaders(): self
+    {
+        return $this->withHeaders([
+            'api-version' => '3.2.1',
+            'request-identifier' => (string) Str::uuid(),
+        ]);
     }
 }

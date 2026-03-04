@@ -6,9 +6,9 @@ namespace LaravelOpenVasp\Enums;
 
 enum TransferStatus: string
 {
-    case Pending = 'pending';
-    case Accepted = 'accepted';
+    case InquiryReceived = 'inquiry_received';
+    case Approved = 'approved';
     case Rejected = 'rejected';
-    case Settled = 'settled';
-    case Cancelled = 'cancelled';
+    case Confirmed = 'confirmed';
+    case Canceled = 'canceled';
 }

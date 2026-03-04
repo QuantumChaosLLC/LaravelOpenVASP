@@ -10,30 +10,56 @@ use LaravelOpenVasp\Models\OpenVaspTransfer;
 
 class DatabaseTransferRepository implements TransferRepository
 {
-    public function create(array $payload): OpenVaspTransfer
+    public function createInquiry(string $inquiryId, array $payload): OpenVaspTransfer
     {
         return OpenVaspTransfer::query()->create([
-            'message_id' => $payload['message_id'],
-            'originator_lei' => $payload['originator_lei'],
-            'beneficiary_lei' => $payload['beneficiary_lei'],
-            'asset_symbol' => $payload['asset']['symbol'],
-            'asset_amount' => $payload['asset']['amount'],
-            'status' => TransferStatus::Pending->value,
-            'payload' => $payload,
-            'decision_reason' => null,
+            'inquiry_id' => $inquiryId,
+            'status' => TransferStatus::InquiryReceived->value,
+            'inquiry_payload' => $payload,
         ]);
     }
 
-    public function findByMessageId(string $messageId): ?OpenVaspTransfer
+    public function findByInquiryId(string $inquiryId): ?OpenVaspTransfer
     {
-        return OpenVaspTransfer::query()->where('message_id', $messageId)->first();
+        return OpenVaspTransfer::query()->where('inquiry_id', $inquiryId)->first();
     }
 
-    public function updateStatus(OpenVaspTransfer $transfer, TransferStatus $status, ?array $reason = null): OpenVaspTransfer
+    public function markApproved(OpenVaspTransfer $transfer, array $approved): OpenVaspTransfer
     {
         $transfer->forceFill([
+            'status' => TransferStatus::Approved->value,
+            'resolution_payload' => ['approved' => $approved],
+            'payment_address' => $approved['address'],
+            'rejection_reason' => null,
+        ])->save();
+
+        return $transfer->refresh();
+    }
+
+    public function markRejected(OpenVaspTransfer $transfer, ?string $reason): OpenVaspTransfer
+    {
+        $transfer->forceFill([
+            'status' => TransferStatus::Rejected->value,
+            'resolution_payload' => ['rejected' => $reason],
+            'payment_address' => null,
+            'rejection_reason' => $reason,
+        ])->save();
+
+        return $transfer->refresh();
+    }
+
+    public function markConfirmed(OpenVaspTransfer $transfer, ?string $txid, ?string $canceledReason): OpenVaspTransfer
+    {
+        $status = $txid !== null ? TransferStatus::Confirmed : TransferStatus::Canceled;
+
+        $transfer->forceFill([
             'status' => $status->value,
-            'decision_reason' => $reason,
+            'confirmation_payload' => [
+                'txid' => $txid,
+                'canceled' => $canceledReason,
+            ],
+            'txid' => $txid,
+            'canceled_reason' => $canceledReason,
         ])->save();
 
         return $transfer->refresh();

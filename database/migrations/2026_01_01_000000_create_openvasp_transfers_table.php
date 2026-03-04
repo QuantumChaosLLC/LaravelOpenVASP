@@ -12,14 +12,15 @@ return new class extends Migration
     {
         Schema::create('openvasp_transfers', function (Blueprint $table): void {
             $table->uuid('id')->primary();
-            $table->string('message_id', 64)->unique();
-            $table->string('originator_lei', 20);
-            $table->string('beneficiary_lei', 20);
-            $table->string('asset_symbol', 20);
-            $table->decimal('asset_amount', 30, 12);
-            $table->string('status', 20)->index();
-            $table->json('payload');
-            $table->json('decision_reason')->nullable();
+            $table->string('inquiry_id', 128)->unique();
+            $table->string('status', 32)->index();
+            $table->json('inquiry_payload');
+            $table->json('resolution_payload')->nullable();
+            $table->json('confirmation_payload')->nullable();
+            $table->string('payment_address')->nullable();
+            $table->text('rejection_reason')->nullable();
+            $table->string('txid', 255)->nullable();
+            $table->text('canceled_reason')->nullable();
             $table->timestamps();
         });
     }

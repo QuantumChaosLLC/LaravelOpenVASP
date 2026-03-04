@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace LaravelOpenVasp\Contracts;
 
-use LaravelOpenVasp\Enums\TransferStatus;
 use LaravelOpenVasp\Models\OpenVaspTransfer;
 
 interface TransferRepository
 {
-    public function create(array $payload): OpenVaspTransfer;
+    public function createInquiry(string $inquiryId, array $payload): OpenVaspTransfer;
 
-    public function findByMessageId(string $messageId): ?OpenVaspTransfer;
+    public function findByInquiryId(string $inquiryId): ?OpenVaspTransfer;
 
-    public function updateStatus(OpenVaspTransfer $transfer, TransferStatus $status, ?array $reason = null): OpenVaspTransfer;
+    public function markApproved(OpenVaspTransfer $transfer, array $approved): OpenVaspTransfer;
+
+    public function markRejected(OpenVaspTransfer $transfer, ?string $reason): OpenVaspTransfer;
+
+    public function markConfirmed(OpenVaspTransfer $transfer, ?string $txid, ?string $canceledReason): OpenVaspTransfer;
 }

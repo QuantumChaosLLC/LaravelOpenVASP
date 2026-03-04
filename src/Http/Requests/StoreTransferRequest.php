@@ -16,15 +16,15 @@ class StoreTransferRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'message_id' => ['required', 'string', 'max:64'],
-            'originator_lei' => ['required', 'string', 'size:20'],
-            'beneficiary_lei' => ['required', 'string', 'size:20'],
-            'asset.symbol' => ['required', 'string', 'max:20'],
-            'asset.amount' => ['required', 'numeric', 'gt:0'],
-            'travel_rule.originator' => ['required', 'array'],
-            'travel_rule.beneficiary' => ['required', 'array'],
-            'travel_rule.originating_wallet' => ['required', 'string', 'max:255'],
-            'travel_rule.beneficiary_wallet' => ['required', 'string', 'max:255'],
+            'amount' => ['required', 'integer', 'min:1'],
+            'callback' => ['required', 'url', 'starts_with:https://'],
+            'asset' => ['required', 'array'],
+            'asset.symbol' => ['nullable', 'string', 'max:32', 'required_without:asset.dti'],
+            'asset.dti' => ['nullable', 'string', 'max:32', 'required_without:asset.symbol'],
+            'IVMS101' => ['required', 'array'],
+            'IVMS101.originator' => ['required', 'array'],
+            'IVMS101.beneficiary' => ['required', 'array'],
+            'IVMS101.originatingVASP.originatingVASP.legalPerson.nationalIdentification.nationalIdentifier' => ['required', 'string', 'regex:/^[A-Z0-9]{18}[0-9]{2}$/'],
         ];
     }
 }
