@@ -30,13 +30,14 @@ jobs:
         with:
           php-version: ${{ matrix.php }}
           coverage: none
+          extensions: mbstring, dom, curl, libxml, json
           tools: composer:v2
 
       - name: Validate composer.json
         run: composer validate --strict
 
-      - name: Install dependencies
-        run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Resolve dependencies for current PHP version
+        run: composer update --prefer-dist --no-interaction --no-progress --with-all-dependencies
 
       - name: Run test suite
         run: composer test
@@ -59,12 +60,12 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: json, dom, curl, libxml, mbstring
+          extensions: mbstring, dom, curl, libxml, json
           coverage: none
           tools: composer:v2
 
-      - name: Install dependencies
-        run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Resolve dependencies for current PHP version
+        run: composer update --prefer-dist --no-interaction --no-progress --with-all-dependencies
 
       - name: Run Pint
         run: ./vendor/bin/pint --test
